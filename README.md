@@ -432,6 +432,22 @@ Refer to [`ios-client`](https://github.com/collabora/WhisperLive/tree/main/Audio
 
   The Compose file stores downloaded Hugging Face models, translation models, and converted WhisperLive models in the named `whisperlive-cache` volume. The volume survives container restarts and `docker compose down`; remove it with `docker compose down -v` when you want to download everything again.
 
+  The first run needs internet access to download every model requested by a client. After the models have been used once, you can run strictly offline:
+
+  ```bash
+  # First run: online, fetch the transcription model.
+  docker compose -f docker-compose.cpu.yml up --build
+
+  # Run a client with each model and translation combination you need,
+  # then stop the server with Ctrl+C.
+
+  # Later runs: use only the persistent cache, with Hugging Face network access disabled.
+  HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 \
+    docker compose -f docker-compose.cpu.yml up
+  ```
+
+  When using `--enable_translation`, make sure the translation model has also been loaded successfully during the online run. If a requested model is missing from the volume, offline startup or the first client connection will fail to load it; there is no automatic update check or background download in WhisperLive.
+
   CPU inference uses 4 OpenMP threads by default. Override this from the shell when starting Compose, based on your CPU:
 
   ```bash

@@ -8,6 +8,8 @@ services:
     environment:
       HF_HOME: /cache/huggingface
       HF_HUB_CACHE: /cache/huggingface/hub
+      HF_HUB_OFFLINE: "${HF_HUB_OFFLINE:-0}"
+      TRANSFORMERS_OFFLINE: "${TRANSFORMERS_OFFLINE:-0}"
       OMP_NUM_THREADS: "${OMP_NUM_THREADS:-4}"
     command: ["python", "run_server.py", "--cache_path", "/cache/whisper-live/"]
     volumes:
