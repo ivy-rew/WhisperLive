@@ -141,11 +141,33 @@ If you don't want this, set `--no_single_model`.
 
 ### Running the Client
 
-Use the below command to run the client:
+For a native Linux client installation with [uv](https://docs.astral.sh/uv/), install the PortAudio development headers required to build PyAudio:
+
 ```bash
-python3 run_client.py --files <audio-file-name>
+sudo apt update
+sudo apt install -y portaudio19-dev
 ```
-This will connect to the localhost server running on port 9090 by default. Use flags `--server` and `--port` to use different configurations. The above command will transcribe audio file provided with `--files` flag.
+
+From the repository root, create a virtual environment and install the client requirements:
+
+```bash
+uv venv
+uv pip install -r requirements/client.txt
+```
+
+Run the client with an audio file:
+
+```bash
+uv run --no-project python run_client.py --files <audio-file-name>
+```
+
+For microphone input, omit `--files`:
+
+```bash
+uv run --no-project python run_client.py
+```
+
+These commands connect to the localhost server on port 9090 by default. Use `--server` and `--port` to connect to a different server. The `--no-project` option tells `uv` to use the virtual environment without trying to install this repository as a package.
 
 
 Here are the details of client instance implemented in `run_client.py` script:
@@ -379,7 +401,15 @@ Refer to [`ios-client`](https://github.com/collabora/WhisperLive/tree/main/Audio
 - CPU
   - Faster-whisper
   ```bash
-  docker run -it -p 9090:9090 ghcr.io/collabora/whisperlive-cpu:latest
+  # Run these commands from the repository root.
+  docker build -f docker/Dockerfile.cpu -t whisperlive-cpu .
+  docker run --rm -it -p 9090:9090 whisperlive-cpu
+  ```
+
+  The server listens on WebSocket port `9090`. To use the prebuilt CPU image instead:
+
+  ```bash
+  docker run --rm -it -p 9090:9090 ghcr.io/collabora/whisperlive-cpu:latest
   ```
 
 ## Troubleshooting
