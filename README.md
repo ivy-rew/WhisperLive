@@ -161,6 +161,17 @@ Run the client with an audio file:
 uv run --no-project python run_client.py --files <audio-file-name>
 ```
 
+To provide topic notes, names, or specialist vocabulary as Whisper context, pass a UTF-8 text or Markdown file with `--prompt_file`:
+
+```bash
+uv run --no-project python run_client.py \
+  --lang de \
+  --prompt_file speaker-notes.md \
+  --files <audio-file-name>
+```
+
+Keep the prompt focused on names, terminology, and the topic. Do not paste a complete speech script, because a long prompt can cause the model to reproduce text that was not spoken.
+
 For microphone input, omit `--files`:
 
 ```bash

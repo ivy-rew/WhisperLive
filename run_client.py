@@ -31,6 +31,10 @@ if __name__ == '__main__':
                           type=str,
                           default='en',
                           help='Language code for transcription, e.g., "en" for English.')
+    parser.add_argument('--prompt_file',
+                          type=Path,
+                          default=None,
+                          help='UTF-8 text or Markdown file containing an initial prompt for Whisper.')
     parser.add_argument('--translate', '-t',
                           action='store_true',
                           help='Use Whisper built-in translation to English (sets task=translate). '
@@ -64,6 +68,13 @@ if __name__ == '__main__':
               "while --enable_translation uses M2M100 for any-to-any. "
               "Both will be active.")
 
+    initial_prompt = None
+    if args.prompt_file is not None:
+        try:
+            initial_prompt = args.prompt_file.read_text(encoding='utf-8')
+        except OSError as error:
+            parser.error(f"Could not read prompt file '{args.prompt_file}': {error}")
+
     client = TranscriptionClient(
         args.server,
         args.port,
@@ -78,6 +89,7 @@ if __name__ == '__main__':
         target_language=args.target_language,              # Target language for translation, e.g., "fr
         enable_timestamps=args.enable_timestamps,
         display_segments=args.n_display_segments,
+        initial_prompt=initial_prompt,
     )
 
     if args.files is None:
