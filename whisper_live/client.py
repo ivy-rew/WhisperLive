@@ -44,7 +44,7 @@ class Client:
         translation_callback=None,
         translation_srt_file_path="output_translated.srt",
         enable_timestamps=False,
-        display_segments=4,
+        display_segments=10,
         hotwords=None,
         enable_diarization=False,
         max_speakers=10,
