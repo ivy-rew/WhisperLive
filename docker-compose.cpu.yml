@@ -1,0 +1,18 @@
+services:
+  whisperlive-cpu:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.cpu
+    ports:
+      - "9090:9090"
+    environment:
+      HF_HOME: /cache/huggingface
+      HF_HUB_CACHE: /cache/huggingface/hub
+      OMP_NUM_THREADS: "${OMP_NUM_THREADS:-4}"
+    command: ["python", "run_server.py", "--cache_path", "/cache/whisper-live/"]
+    volumes:
+      - whisperlive-cache:/cache
+    init: true
+
+volumes:
+  whisperlive-cache:

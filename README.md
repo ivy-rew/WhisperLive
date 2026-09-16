@@ -417,6 +417,27 @@ Refer to [`ios-client`](https://github.com/collabora/WhisperLive/tree/main/Audio
   docker run --rm -it -p 9090:9090 whisperlive-cpu
   ```
 
+  The same server can be built and started with Docker Compose:
+
+  ```bash
+  docker compose -f docker-compose.cpu.yml up --build
+  ```
+
+  Stop it with `Ctrl+C`, or run it in the background and stop it later with:
+
+  ```bash
+  docker compose -f docker-compose.cpu.yml up --build -d
+  docker compose -f docker-compose.cpu.yml down
+  ```
+
+  The Compose file stores downloaded Hugging Face models, translation models, and converted WhisperLive models in the named `whisperlive-cache` volume. The volume survives container restarts and `docker compose down`; remove it with `docker compose down -v` when you want to download everything again.
+
+  CPU inference uses 4 OpenMP threads by default. Override this from the shell when starting Compose, based on your CPU:
+
+  ```bash
+  OMP_NUM_THREADS=8 docker compose -f docker-compose.cpu.yml up --build
+  ```
+
   The server listens on WebSocket port `9090`. To use the prebuilt CPU image instead:
 
   ```bash
