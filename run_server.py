@@ -18,8 +18,8 @@ if __name__ == "__main__":
                         help="Websocket port to run the server on.")
     parser.add_argument('--backend', '-b',
                         type=str,
-                        default='faster_whisper',
-                        help='Backends from ["tensorrt", "faster_whisper", "openvino"]')
+                        default='parakeet',
+                        help='Backends from ["parakeet", "faster_whisper", "tensorrt", "openvino"]')
     parser.add_argument('--faster_whisper_custom_model_path', '-fw',
                         type=str, default=None,
                         help="Custom Faster Whisper Model")
