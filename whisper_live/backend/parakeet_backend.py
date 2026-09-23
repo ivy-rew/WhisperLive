@@ -26,7 +26,7 @@ def split_sentences(result):
     for token, timestamp in zip(result.tokens, result.timestamps):
         if token.startswith(" ") and text.rstrip().endswith((".", "?", "!")):
             if has_words(text):
-                segments.append(Segment(start, timestamp, text.strip()))
+                segments.append(Segment(start, timestamp, " " + text.strip()))
             start = None
             text = ""
         if not has_words(token) and not has_words(text):
@@ -35,7 +35,7 @@ def split_sentences(result):
             start = timestamp
         text += token
     if has_words(text):
-        segments.append(Segment(start, result.timestamps[-1], text.strip()))
+        segments.append(Segment(start, result.timestamps[-1], " " + text.strip()))
     return segments
 
 
