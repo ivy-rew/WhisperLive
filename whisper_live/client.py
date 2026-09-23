@@ -157,6 +157,7 @@ class Client:
 
         self.transcript = []
         self.translated_transcript = []
+        self.last_translated_segment = None
         print("[INFO]: * recording")
 
     def _create_websocket(self):
@@ -187,11 +188,16 @@ class Client:
     def process_segments(self, segments, translated=False):
         """Processes transcript segments."""
         text = []
+        if translated:
+            self.last_translated_segment = None
         for i, seg in enumerate(segments):
             if not text or text[-1] != seg["text"]:
                 text.append(seg["text"].strip())
                 if i == len(segments) - 1 and not seg.get("completed", False):
-                    self.last_segment = seg
+                    if translated:
+                        self.last_translated_segment = seg
+                    else:
+                        self.last_segment = seg
                 elif self.server_backend in ("faster_whisper", "parakeet") and seg.get("completed", False):
                     if translated:
                         if (not self.translated_transcript or float(seg['start']) >= float(self.translated_transcript[-1]['end'])):
@@ -241,7 +247,7 @@ class Client:
                     print(f"\n\nTRANSLATION to {self.target_language}:")
                     utils.print_transcript([
                         {"start": seg["start"], "end": seg["end"], "text": seg["text"]}
-                        for seg in self.translated_transcript[-self.display_segments:]
+                        for seg in self.translated_segments_to_display()
                     ], timestamps=True, max_lines=self.display_segments)
 
             else:
@@ -254,8 +260,14 @@ class Client:
                 if self.enable_translation:
                     print(f"\n\nTRANSLATION to {self.target_language}:")
                     utils.print_transcript(
-                        [seg["text"] for seg in self.translated_transcript[-self.display_segments:]],
+                        [seg["text"] for seg in self.translated_segments_to_display()],
                         translated=True, max_lines=self.display_segments)
+
+    def translated_segments_to_display(self):
+        segments = self.translated_transcript[-self.display_segments:]
+        if self.last_translated_segment is not None:
+            segments = segments + [self.last_translated_segment]
+        return segments
 
 
     def on_message(self, ws, message):
