@@ -528,6 +528,12 @@ class ServeClientBase(object):
             with self.lock:
                 self.timestamp_offset += offset
 
+        if self.translation_queue and last_segment:
+            try:
+                self.translation_queue.put_nowait(last_segment.copy())
+            except queue.Full:
+                pass
+
         self._trim_transcript()
         return last_segment
 
