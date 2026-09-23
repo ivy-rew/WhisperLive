@@ -192,7 +192,7 @@ class Client:
                 text.append(seg["text"].strip())
                 if i == len(segments) - 1 and not seg.get("completed", False):
                     self.last_segment = seg
-                elif self.server_backend == "faster_whisper" and seg.get("completed", False):
+                elif self.server_backend in ("faster_whisper", "parakeet") and seg.get("completed", False):
                     if translated:
                         if (not self.translated_transcript or float(seg['start']) >= float(self.translated_transcript[-1]['end'])):
                             self.translated_transcript.append(seg)
@@ -435,7 +435,7 @@ class Client:
             message (output_path, optional): The path to the target file.  Default is "output.srt".
 
         """
-        if self.server_backend == "faster_whisper":
+        if self.server_backend in ("faster_whisper", "parakeet"):
             if not self.transcript and self.last_segment is not None:
                 self.transcript.append(self.last_segment)
             elif self.last_segment and self.transcript[-1]["text"] != self.last_segment["text"]:
