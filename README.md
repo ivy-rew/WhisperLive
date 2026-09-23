@@ -57,7 +57,11 @@ uv run run_server.py
 ./runClient.sh
 ```
 
-`runClient.sh` passes any extra arguments on to `run_client.py`, e.g. `./runClient.sh --files talk.wav` or `./runClient.sh --prompt_file notes.md`.
+`runClient.sh` passes any extra arguments on to `run_client.py`, e.g. `./runClient.sh --files talk.wav`.
+
+The server uses [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) by default, which runs in real time on a laptop CPU and detects the language by itself (25 European languages).
+Translation uses the matching [OPUS-MT](https://huggingface.co/Helsinki-NLP) model, e.g. `opus-mt-de-en`.
+Start the server with `--backend faster_whisper` to use Whisper instead, which supports more languages and `--prompt_file`, but needs a GPU to feel live.
 
 ### OpenAI REST interface
 
@@ -79,7 +83,7 @@ uv run client_openai.py $AUDIO_FILE
 - Please follow [TensorRT_whisper readme](https://github.com/collabora/WhisperLive/blob/main/TensorRT_whisper.md) for setup of [NVIDIA/TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM) and for building Whisper-TensorRT engine.
 
 ## Getting Started
-The server supports 3 backends `faster_whisper`, `tensorrt` and `openvino`. If running `tensorrt` backend follow [TensorRT_whisper readme](https://github.com/collabora/WhisperLive/blob/main/TensorRT_whisper.md)
+The server supports 4 backends `parakeet` (default), `faster_whisper`, `tensorrt` and `openvino`. If running `tensorrt` backend follow [TensorRT_whisper readme](https://github.com/collabora/WhisperLive/blob/main/TensorRT_whisper.md)
 
 ### Running the Server
 - [Faster Whisper](https://github.com/SYSTRAN/faster-whisper) backend
