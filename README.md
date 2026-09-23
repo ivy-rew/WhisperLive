@@ -61,7 +61,7 @@ uv run run_server.py
 
 The server uses [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) by default, which runs in real time on a laptop CPU and detects the language by itself (25 European languages).
 Translation uses the matching [OPUS-MT](https://huggingface.co/Helsinki-NLP) model, e.g. `opus-mt-de-en`.
-Start the server with `--backend faster_whisper` to use Whisper instead, which supports more languages and `--prompt_file`, but needs a GPU to feel live.
+Start the server with `--backend faster_whisper` and the client with `--model large-v3-turbo` to use Whisper instead, which supports more languages and `--prompt_file`, but needs a GPU to feel live.
 
 ### OpenAI REST interface
 
