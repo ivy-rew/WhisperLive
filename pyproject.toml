@@ -1,0 +1,66 @@
+[project]
+name = "whisper-live"
+dynamic = ["version"]
+description = "A nearly-live implementation of OpenAI's Whisper."
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Collabora Ltd", email = "vineet.suryan@collabora.com" }]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "av",
+    "numpy>=1.26.4,<2.5",
+    "pyaudio",
+    "scipy",
+    "websocket-client",
+]
+
+[project.urls]
+Homepage = "https://github.com/collabora/WhisperLive"
+
+[project.optional-dependencies]
+server = [
+    "evaluate>=0.4.6",
+    "fastapi>=0.141.1",
+    "faster-whisper==1.2.0",
+    "jiwer>=4.0.0",
+    "kaldialign>=0.12.0",
+    "librosa>=0.11.0",
+    "numba>=0.67.0",
+    "onnxruntime>=1.20.0,<2",
+    "openai-whisper==20250625",
+    "openvino>=2026.4.0",
+    "openvino-genai>=2026.4.0.0",
+    "openvino-tokenizers>=2026.4.0.0",
+    "optimum>=2.3.0",
+    "optimum-intel>=1.15.0",
+    "python-multipart>=0.0.32",
+    "sentencepiece>=0.2.2",
+    "soundfile>=0.14.0",
+    "tokenizers==0.20.3",
+    "torch>=2.14.0",
+    "transformers[torch]>=4.46.3",
+    "uvicorn>=0.53.0",
+    "websockets>=16.1.1",
+]
+cuda = [
+    "nvidia-cublas-cu12>=12.9.2.10 ; sys_platform == 'linux'",
+    "nvidia-cudnn-cu12>=9.25.0.15 ; sys_platform == 'linux'",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "whisper_live.__version__.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["whisper_live*"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
