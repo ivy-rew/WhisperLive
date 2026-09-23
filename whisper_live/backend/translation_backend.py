@@ -6,8 +6,7 @@ import queue
 from typing import Dict, Any, Optional
 import torch
 import threading
-from transformers import M2M100ForConditionalGeneration
-from whisper_live.backend.tokenization_small100 import SMALL100Tokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from whisper_live.backend.base import ServeClientBase
 
@@ -24,9 +23,9 @@ class ServeClientTranslation(ServeClientBase):
         client_uid,
         websocket,
         translation_queue,
-        target_language="fr", 
+        target_language="fr",
         send_last_n_segments=10,
-        model_name="alirezamsh/small100"
+        source_language=None,
     ):
         """
         Initialize the translation client.
@@ -37,12 +36,12 @@ class ServeClientTranslation(ServeClientBase):
             translation_queue (queue.Queue): Queue containing completed segments to translate
             target_language (str): Target language code (default: "fr" for French)
             send_last_n_segments (int): Number of recent translated segments to send
-            model_name (str): Translation model name to use
+            source_language (str): Language of the transcript, None for multilingual input
         """
         super().__init__(client_uid, websocket, send_last_n_segments)
         self.translation_queue = translation_queue
         self.target_language = target_language
-        self.model_name = model_name
+        self.model_name = f"Helsinki-NLP/opus-mt-{source_language or 'mul'}-{target_language}"
         self.translated_segments = []
         self.translation_model = None
         self.tokenizer = None
@@ -56,14 +55,11 @@ class ServeClientTranslation(ServeClientBase):
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             logging.info(f"Loading translation model on device: {self.device}")
             
-            self.translation_model = M2M100ForConditionalGeneration.from_pretrained(
-                self.model_name
-            ).to(self.device)
-            self.tokenizer = SMALL100Tokenizer.from_pretrained(self.model_name)
-            self.tokenizer.tgt_lang = self.target_language
-            
+            self.translation_model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
             self.model_loaded = True
-            logging.info(f"Translation model loaded successfully. Target language: {self.target_language}")
+            logging.info(f"Translation model {self.model_name} loaded successfully")
         except Exception as e:
             logging.error(f"Failed to load translation model: {e}")
             self.translation_model = None
@@ -182,18 +178,6 @@ class ServeClientTranslation(ServeClientBase):
         This method will be called when the translation thread starts.
         """
         self.process_translation_queue()
-    
-    def set_target_language(self, language: str):
-        """
-        Change the target language for translation.
-        
-        Args:
-            language (str): New target language code
-        """
-        self.target_language = language
-        if self.tokenizer:
-            self.tokenizer.tgt_lang = language
-            logging.info(f"Target language changed to: {language}")
     
     def cleanup(self):
         """Clean up translation resources."""

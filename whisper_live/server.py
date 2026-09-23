@@ -295,7 +295,8 @@ class TranscriptionServer:
                 websocket=websocket,
                 translation_queue=translation_queue,
                 target_language=target_language,
-                send_last_n_segments=options.get("send_last_n_segments", 10)
+                send_last_n_segments=options.get("send_last_n_segments", 10),
+                source_language=options.get("language"),
             )
             
             # Start translation thread
