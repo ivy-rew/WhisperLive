@@ -208,6 +208,7 @@ class BackendType(Enum):
     FASTER_WHISPER = "faster_whisper"
     TENSORRT = "tensorrt"
     OPENVINO = "openvino"
+    PARAKEET = "parakeet"
 
     @staticmethod
     def valid_types() -> List[str]:
@@ -225,6 +226,9 @@ class BackendType(Enum):
     
     def is_openvino(self) -> bool:
         return self == BackendType.OPENVINO
+
+    def is_parakeet(self) -> bool:
+        return self == BackendType.PARAKEET
 
 
 class AdmissionRateLimiter:
@@ -358,6 +362,19 @@ class TranscriptionServer:
                     "message": "OpenVINO not supported on Server yet. "
                                 "Reverting to available backend: 'faster_whisper'"
                 }))
+
+        if self.backend.is_parakeet():
+            from whisper_live.backend.parakeet_backend import ServeClientParakeet
+            client = ServeClientParakeet(
+                websocket,
+                language=options["language"],
+                client_uid=options["uid"],
+                send_last_n_segments=options.get("send_last_n_segments", 10),
+                clip_audio=options.get("clip_audio", False),
+                same_output_threshold=options.get("same_output_threshold", 10),
+                translation_queue=translation_queue,
+            )
+            logging.info("Running parakeet backend.")
 
         try:
             if self.backend.is_faster_whisper():
