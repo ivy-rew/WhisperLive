@@ -238,6 +238,7 @@ client = TranscriptionClient(
   word_timestamps=True,
 )
 ```
+For the terminal client, use `uv run run_client.py --word_timestamps`; `runClient.sh` enables it by default. Both Faster Whisper and Parakeet provide word confidence data for this option. In the live transcript, words with probability below `0.3` are underlined in bold dark red; words with probability from `0.3` to below `0.6` use a lighter red underline. Words at or above `0.6` are not underlined. These are rough model-confidence signals, not guarantees that a word is correct or incorrect. This highlighting applies to transcription, not translated output.
 When enabled, each segment in the WebSocket response includes a `words` array:
 ```json
 {

@@ -190,6 +190,8 @@ class Client:
         text = []
         if translated:
             self.last_translated_segment = None
+        else:
+            self.last_segment = None
         for i, seg in enumerate(segments):
             if not text or text[-1] != seg["text"]:
                 text.append(seg["text"].strip())
@@ -230,38 +232,73 @@ class Client:
         if self.log_transcription:
             if self.enable_timestamps:
                 original_text_with_timestamps = [
-                    {"start": seg["start"], "end": seg["end"], "text": seg["text"]}
+                    {
+                        "start": seg["start"],
+                        "end": seg["end"],
+                        "text": seg["text"],
+                        "words": seg.get("words"),
+                    }
                     for seg in self.transcript[-self.display_segments:]]
-                if self.last_segment is not None and not any(
-                    data.get("text") == self.last_segment["text"]
-                    for data in original_text_with_timestamps):
+                if self.last_segment is not None:
                     original_text_with_timestamps.append({
                         "start": self.last_segment["start"],
                         "end": self.last_segment["end"],
-                        "text": self.last_segment["text"]
+                        "text": self.last_segment["text"],
+                        "words": self.last_segment.get("words"),
                     })
+                transcript_ongoing_index = len(original_text_with_timestamps) - 1 if self.last_segment is not None else None
+                transcript_completed_count = len(original_text_with_timestamps) - int(transcript_ongoing_index is not None)
                 utils.clear_screen()
-                utils.print_transcript(original_text_with_timestamps, timestamps=True, max_lines=self.display_segments)
+                utils.print_transcript(
+                    original_text_with_timestamps,
+                    timestamps=True,
+                    max_lines=self.display_segments,
+                    ongoing_index=transcript_ongoing_index,
+                    completed_indices=range(max(0, transcript_completed_count - 2), transcript_completed_count),
+                )
 
                 if self.enable_translation:
                     print(f"\n\nTRANSLATION to {self.target_language}:")
+                    translated_segments = self.translated_segments_to_display()
+                    translation_ongoing_index = len(translated_segments) - 1 if self.last_translated_segment is not None else None
+                    translation_completed_count = len(translated_segments) - int(translation_ongoing_index is not None)
                     utils.print_transcript([
                         {"start": seg["start"], "end": seg["end"], "text": seg["text"]}
-                        for seg in self.translated_segments_to_display()
-                    ], timestamps=True, max_lines=self.display_segments)
+                        for seg in translated_segments
+                    ], timestamps=True, max_lines=self.display_segments,
+                        ongoing_index=translation_ongoing_index,
+                        completed_indices=range(max(0, translation_completed_count - 2), translation_completed_count))
 
             else:
-                original_text = [seg["text"] for seg in self.transcript[-self.display_segments:]]
-                if self.last_segment is not None and self.last_segment["text"] not in original_text:
+                original_segments = self.transcript[-self.display_segments:]
+                original_text = [seg["text"] for seg in original_segments]
+                words_by_segment = [seg.get("words") for seg in original_segments]
+                if self.last_segment is not None:
                     original_text.append(self.last_segment["text"])
+                    words_by_segment.append(self.last_segment.get("words"))
+                transcript_ongoing_index = len(original_text) - 1 if self.last_segment is not None else None
+                transcript_completed_count = len(original_text) - int(transcript_ongoing_index is not None)
                 utils.clear_screen()
-                utils.print_transcript(original_text, max_lines=self.display_segments)
+                utils.print_transcript(
+                    original_text,
+                    max_lines=self.display_segments,
+                    ongoing_index=transcript_ongoing_index,
+                    completed_indices=range(max(0, transcript_completed_count - 2), transcript_completed_count),
+                    words_by_segment=words_by_segment if self.word_timestamps else None,
+                )
 
                 if self.enable_translation:
                     print(f"\n\nTRANSLATION to {self.target_language}:")
+                    translated_segments = self.translated_segments_to_display()
+                    translation_ongoing_index = len(translated_segments) - 1 if self.last_translated_segment is not None else None
+                    translation_completed_count = len(translated_segments) - int(translation_ongoing_index is not None)
                     utils.print_transcript(
-                        [seg["text"] for seg in self.translated_segments_to_display()],
-                        translated=True, max_lines=self.display_segments)
+                        [seg["text"] for seg in translated_segments],
+                        translated=True,
+                        max_lines=self.display_segments,
+                        ongoing_index=translation_ongoing_index,
+                        completed_indices=range(max(0, translation_completed_count - 2), translation_completed_count),
+                    )
 
     def translated_segments_to_display(self):
         segments = self.translated_transcript[-self.display_segments:]

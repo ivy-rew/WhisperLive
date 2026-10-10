@@ -55,6 +55,9 @@ if __name__ == '__main__':
     parser.add_argument('--enable_timestamps',
                           action='store_true',
                           help='Show transcription with timestamps')
+    parser.add_argument('--word_timestamps',
+                          action='store_true',
+                          help='Show word-level timestamps and underline low-confidence transcription words')
     parser.add_argument('--n_display_segments',
                           type=int,
                           default=10,
@@ -88,6 +91,7 @@ if __name__ == '__main__':
         enable_translation=args.enable_translation,        # Enable translation of the transcription output
         target_language=args.target_language,              # Target language for translation, e.g., "fr
         enable_timestamps=args.enable_timestamps,
+        word_timestamps=args.word_timestamps,
         display_segments=args.n_display_segments,
         initial_prompt=initial_prompt,
     )
