@@ -42,6 +42,71 @@ class TestClientWebSocketCommunication(BaseTestCase):
         self.assertEqual(self.mock_websocket.call_args[0][0], expected_url)
 
 
+class TestTranscriptHighlight(unittest.TestCase):
+    @patch("whisper_live.utils.shutil.get_terminal_size")
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_highlights_only_ongoing_plain_text(self, mock_stdout, mock_terminal_size):
+        mock_terminal_size.return_value = os.terminal_size((80, 20))
+
+        print_transcript(["committed ", "still changing"], ongoing_index=1)
+
+        output = mock_stdout.getvalue()
+        self.assertIn("\033[30;43mstill changing\033[0m", output)
+        self.assertNotIn("\033[30;43mcommitted", output)
+
+    @patch("whisper_live.utils.shutil.get_terminal_size")
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_highlights_ongoing_text_not_timestamp(self, mock_stdout, mock_terminal_size):
+        mock_terminal_size.return_value = os.terminal_size((80, 20))
+
+        print_transcript(
+            [
+                {"start": "1.000", "end": "2.000", "text": "earlier"},
+                {"start": "2.000", "end": "3.000", "text": "just completed"},
+                {"start": "3.000", "end": "4.000", "text": "still changing"},
+            ],
+            timestamps=True,
+            ongoing_index=2,
+            completed_indices=[1],
+        )
+
+        output = mock_stdout.getvalue()
+        self.assertIn("[2.000 -> 3.000] \033[30;42mjust completed\033[0m", output)
+        self.assertIn("[3.000 -> 4.000] \033[30;43mstill changing\033[0m", output)
+
+
+class TestLiveSegmentDisplay(BaseTestCase):
+    @patch("whisper_live.utils.shutil.get_terminal_size")
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_highlights_incomplete_transcript_and_translation(self, mock_stdout, mock_terminal_size):
+        mock_terminal_size.return_value = os.terminal_size((80, 20))
+        self.client.server_backend = "faster_whisper"
+        self.client.enable_translation = True
+
+        self.client.process_segments([
+            {"start": "0.000", "end": "1.000", "text": "old transcript", "completed": True},
+            {"start": "1.000", "end": "2.000", "text": "recent transcript one", "completed": True},
+            {"start": "2.000", "end": "3.000", "text": "recent transcript two", "completed": True},
+            {"start": "3.000", "end": "4.000", "text": "live transcript", "completed": False},
+        ])
+        self.client.process_segments([
+            {"start": "0.000", "end": "1.000", "text": "ancienne traduction", "completed": True},
+            {"start": "1.000", "end": "2.000", "text": "traduction recente un", "completed": True},
+            {"start": "2.000", "end": "3.000", "text": "traduction recente deux", "completed": True},
+            {"start": "3.000", "end": "4.000", "text": "traduction en cours", "completed": False},
+        ], translated=True)
+
+        output = mock_stdout.getvalue()
+        self.assertIn("\033[30;42mrecent transcript one\033[0m", output)
+        self.assertIn("\033[30;42mrecent transcript two\033[0m", output)
+        self.assertNotIn("\033[30;42mold transcript\033[0m", output)
+        self.assertIn("\033[30;43mlive transcript\033[0m", output)
+        self.assertIn("\033[30;42mtraduction recente un\033[0m", output)
+        self.assertIn("\033[30;42mtraduction recente deux\033[0m", output)
+        self.assertNotIn("\033[30;42mancienne traduction\033[0m", output)
+        self.assertIn("\033[30;43mtraduction en cours\033[0m", output)
+
+
 class TestClientCallbacks(BaseTestCase):
     def test_on_open(self):
 

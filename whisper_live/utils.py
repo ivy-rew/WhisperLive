@@ -12,27 +12,87 @@ def clear_screen():
     print("\033[H\033[2J\033[3J", end="", flush=True)
 
 
-def print_transcript(text, translated=False, timestamps=False, max_lines=3):
+def _wrap_with_highlights(text, wrapper, highlights):
+    wrapped_lines = []
+    source_cursor = 0
+
+    for line_index, line in enumerate(wrapper.wrap(text)):
+        indent = wrapper.initial_indent if line_index == 0 else wrapper.subsequent_indent
+        content = line[len(indent):] if line.startswith(indent) else line
+        source_start = text.find(content, source_cursor)
+        if source_start < 0:
+            wrapped_lines.append((line, []))
+            continue
+
+        source_end = source_start + len(content)
+        line_highlights = []
+        for start, end, color in highlights:
+            highlight_start = max(0, start - source_start)
+            highlight_end = min(len(content), end - source_start)
+            if highlight_start < highlight_end:
+                line_highlights.append((highlight_start, highlight_end, color))
+        wrapped_lines.append((indent + content, line_highlights))
+        source_cursor = source_end
+
+    return wrapped_lines
+
+
+def print_transcript(
+    text,
+    translated=False,
+    timestamps=False,
+    max_lines=3,
+    ongoing_index=None,
+    completed_indices=(),
+):
     """Prints the last `max_lines` wrapped lines of transcript text in a subtitle-like block."""
     terminal_width = shutil.get_terminal_size((80, 20)).columns
     wrap_width = max(10, min(80, terminal_width - 8))
+    completed_indices = set(completed_indices)
 
     if timestamps:
         lines = []
-        for t in text:
+        for index, t in enumerate(text):
             prefix = f'[{t["start"]} -> {t["end"]}] '
             wrapper = textwrap.TextWrapper(
                 width=wrap_width,
                 subsequent_indent=" " * len(prefix),
             )
-            lines.extend(wrapper.wrap(f'{prefix}{t["text"]}'))
+            segment_text = f'{prefix}{t["text"]}'
+            if index == ongoing_index:
+                highlights = [(len(prefix), len(segment_text), "\033[30;43m")]
+            elif index in completed_indices:
+                highlights = [(len(prefix), len(segment_text), "\033[30;42m")]
+            else:
+                highlights = []
+            lines.extend(_wrap_with_highlights(segment_text, wrapper, highlights))
     else:
         wrapper = textwrap.TextWrapper(width=wrap_width)
         transcript = " ".join(text) if translated else "".join(text)
-        lines = wrapper.wrap(text=transcript)
+        separator = " " if translated else ""
+        highlights = []
+        source_start = 0
+        for index, part in enumerate(text):
+            if index == ongoing_index:
+                color = "\033[30;43m"
+            elif index in completed_indices:
+                color = "\033[30;42m"
+            else:
+                color = None
+            if color and part:
+                highlights.append((source_start, source_start + len(part), color))
+            source_start += len(part) + (len(separator) if index < len(text) - 1 else 0)
+        lines = _wrap_with_highlights(transcript, wrapper, highlights)
 
-    for line in lines[-max_lines:]:
-        print(line.center(terminal_width))
+    for line, line_highlights in lines[-max_lines:]:
+        centered = line.center(terminal_width)
+        left_padding = (terminal_width - len(line)) // 2
+        for start, end, color in reversed(line_highlights):
+            start += left_padding
+            end += left_padding
+            centered = f'{centered[:end]}\033[0m{centered[end:]}'
+            centered = f'{centered[:start]}{color}{centered[start:]}'
+        print(centered)
 
 
 def format_time(s):
