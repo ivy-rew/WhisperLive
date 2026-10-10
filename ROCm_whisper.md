@@ -1,6 +1,8 @@
 # WhisperLive-ROCm
 Run WhisperLive's `faster_whisper` backend on AMD GPUs using the official [CTranslate2 ROCm wheel](https://github.com/OpenNMT/CTranslate2/releases). Tested on Radeon AI PRO R9700 (gfx1201/RDNA4) and Ryzen AI Max+ 395 / Radeon 8060S (gfx1151/Strix Halo).
 
+> ROCm is AMD only. It does not work on Intel CPUs or Intel GPUs; use the CPU (`faster_whisper`) or `openvino` backend there.
+
 ## Docker Installation (recommended)
 - Install [docker](https://docs.docker.com/engine/install/)
 

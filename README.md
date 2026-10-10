@@ -34,36 +34,47 @@ input from microphone and pre-recorded audio files.
 - [Citations](#citations)
 
 ## Installation
-- Install PortAudio (required system dependency for microphone input via PyAudio)
-```bash
- bash scripts/setup.sh
-```
-On Debian/Ubuntu this installs `portaudio19-dev`, on Fedora `portaudio-devel`, on macOS it uses Homebrew (`portaudio`).
+Requirements: [uv](https://docs.astral.sh/uv/getting-started/installation/) and the PortAudio headers for microphone input
+(`sudo dnf install portaudio-devel`, `sudo apt install portaudio19-dev` or `brew install portaudio`).
 
-- Install 3.12 venv (on Fedora `sudo dnf install -y python3.12 python3.12-pip`)
+uv picks the right Python version and creates `.venv` on its own.
 
 ```bash
-python3.12 -m venv whisper_env
-source whisper_env/bin/activate
+uv sync --extra server        # server + client
+uv sync                       # client only, e.g. when the server runs in Docker or on another machine
+uv sync --extra server --extra cuda   # NVIDIA GPU: adds the cuBLAS/cuDNN libraries faster-whisper needs
 ```
 
-- Install whisper-live from pip
+PyTorch is installed from the CPU-only index, since it is only used by the translation model and not by faster-whisper.
+
+### Quick start: live Swiss German to English
+
 ```bash
- pip install whisper-live
+# terminal 1: server
+uv run run_server.py
+
+# terminal 2: microphone → German transcript → English translation
+./runClient.sh
 ```
+
+`runClient.sh` passes any extra arguments on to `run_client.py`, e.g. `./runClient.sh --files talk.wav`.
+
+The server uses [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) by default, which runs in real time on a laptop CPU and detects the language by itself (25 European languages).
+Translation uses the matching [OPUS-MT](https://huggingface.co/Helsinki-NLP) model, e.g. `opus-mt-de-en`.
+Start the server with `--backend faster_whisper` and the client with `--model large-v3-turbo` to use Whisper instead, which supports more languages and `--prompt_file`, but needs a GPU to feel live.
 
 ### OpenAI REST interface
 
 #### Server
 
 ```bash
-python3 run_server.py --port 9090 --backend faster_whisper --max_clients 4 --max_connection_time 600 --enable_rest --cors-origins="http://localhost:8080,http://127.0.0.1:8080"
+uv run run_server.py --port 9090 --backend faster_whisper --max_clients 4 --max_connection_time 600 --enable_rest --cors-origins="http://localhost:8080,http://127.0.0.1:8080"
 ```
 
 #### Client
 
 ```bash
-python3 client_openai.py $AUDIO_FILE
+uv run client_openai.py $AUDIO_FILE
 ```
 
 
@@ -72,18 +83,18 @@ python3 client_openai.py $AUDIO_FILE
 - Please follow [TensorRT_whisper readme](https://github.com/collabora/WhisperLive/blob/main/TensorRT_whisper.md) for setup of [NVIDIA/TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM) and for building Whisper-TensorRT engine.
 
 ## Getting Started
-The server supports 3 backends `faster_whisper`, `tensorrt` and `openvino`. If running `tensorrt` backend follow [TensorRT_whisper readme](https://github.com/collabora/WhisperLive/blob/main/TensorRT_whisper.md)
+The server supports 4 backends `parakeet` (default), `faster_whisper`, `tensorrt` and `openvino`. If running `tensorrt` backend follow [TensorRT_whisper readme](https://github.com/collabora/WhisperLive/blob/main/TensorRT_whisper.md)
 
 ### Running the Server
 - [Faster Whisper](https://github.com/SYSTRAN/faster-whisper) backend
 ```bash
-python3 run_server.py --port 9090 \
+uv run run_server.py --port 9090 \
                       --backend faster_whisper \
                       --max_clients 4 \
                       --max_connection_time 600
   
 # running with custom model and cache_dir to save auto-converted ctranslate2 models
-python3 run_server.py --port 9090 \
+uv run run_server.py --port 9090 \
                       --backend faster_whisper \
                       --max_clients 4 \
                       --max_connection_time 600 \
@@ -94,14 +105,14 @@ python3 run_server.py --port 9090 \
 - TensorRT backend. Currently, we recommend to only use the docker setup for TensorRT. Follow [TensorRT_whisper readme](https://github.com/collabora/WhisperLive/blob/main/TensorRT_whisper.md) which works as expected. Make sure to build your TensorRT Engines before running the server with TensorRT backend.
 ```bash
 # Run English only model
-python3 run_server.py -p 9090 \
+uv run run_server.py -p 9090 \
                       -b tensorrt \
                       -trt /home/TensorRT-LLM/examples/whisper/whisper_small_en \
                       --max_clients 4 \
                       --max_connection_time 600
 
 # Run Multilingual model
-python3 run_server.py -p 9090 \
+uv run run_server.py -p 9090 \
                       -b tensorrt \
                       -trt /home/TensorRT-LLM/examples/whisper/whisper_small \
                       -m \
@@ -116,7 +127,7 @@ python3 run_server.py -p 9090 \
   - > **Native (non-Docker) Use:** If you prefer running outside Docker, ensure the Intel drivers and OpenVINO runtime are installed and properly configured on your system. Refer to the documentation for [installing OpenVINO](https://docs.openvino.ai/2025/get-started/install-openvino.html?PACKAGE=OPENVINO_BASE&VERSION=v_2025_0_0&OP_SYSTEM=LINUX&DISTRIBUTION=PIP#).
 
 ```
-python3 run_server.py -p 9090 -b openvino
+uv run run_server.py -p 9090 -b openvino
 ```
 
 ### Setting up AMD ROCm for faster_whisper backend
@@ -126,7 +137,7 @@ python3 run_server.py -p 9090 -b openvino
 #### Controlling OpenMP Threads
 To control the number of threads used by OpenMP, you can set the `OMP_NUM_THREADS` environment variable. This is useful for managing CPU resources and ensuring consistent performance. If not specified, `OMP_NUM_THREADS` is set to `1` by default. You can change this by using the `--omp_num_threads` argument:
 ```bash
-python3 run_server.py --port 9090 \
+uv run run_server.py --port 9090 \
                       --backend faster_whisper \
                       --omp_num_threads 4
 ```
@@ -141,30 +152,16 @@ If you don't want this, set `--no_single_model`.
 
 ### Running the Client
 
-For a native Linux client installation with [uv](https://docs.astral.sh/uv/), install the PortAudio development headers required to build PyAudio:
-
-```bash
-sudo apt update
-sudo apt install -y portaudio19-dev
-```
-
-From the repository root, create a virtual environment and install the client requirements:
-
-```bash
-uv venv
-uv pip install -r requirements/client.txt
-```
-
 Run the client with an audio file:
 
 ```bash
-uv run --no-project python run_client.py --files <audio-file-name>
+uv run run_client.py --files <audio-file-name>
 ```
 
 To provide topic notes, names, or specialist vocabulary as Whisper context, pass a UTF-8 text or Markdown file with `--prompt_file`:
 
 ```bash
-uv run --no-project python run_client.py \
+uv run run_client.py \
   --lang de \
   --prompt_file speaker-notes.md \
   --files <audio-file-name>
@@ -175,10 +172,10 @@ Keep the prompt focused on names, terminology, and the topic. Do not paste a com
 For microphone input, omit `--files`:
 
 ```bash
-uv run --no-project python run_client.py
+uv run run_client.py
 ```
 
-These commands connect to the localhost server on port 9090 by default. Use `--server` and `--port` to connect to a different server. The `--no-project` option tells `uv` to use the virtual environment without trying to install this repository as a package.
+These commands connect to the localhost server on port 9090 by default. Use `--server` and `--port` to connect to a different server.
 
 
 Here are the details of client instance implemented in `run_client.py` script:
@@ -267,7 +264,7 @@ The `hotwords` parameter is a comma-separated string passed directly to faster-w
 #### Speaker Diarization
 Real-time speaker identification using pyannote.audio embeddings (optional dependency):
 ```bash
-pip install pyannote.audio
+uv run --with pyannote.audio run_server.py
 ```
 ```python
 client = TranscriptionClient(
@@ -287,14 +284,14 @@ The OpenAI-compatible REST endpoint also accepts `known_speaker_names` and uploa
 #### Batch Inference
 Batch multiple client sessions into single GPU calls for higher throughput:
 ```bash
-python3 run_server.py --port 9090 --backend faster_whisper \
+uv run run_server.py --port 9090 --backend faster_whisper \
   --batch_inference --batch_max_size 8 --batch_window_ms 50
 ```
 
 #### Raw PCM Input
 Accept raw PCM int16 audio from clients (useful for embedded devices):
 ```bash
-python3 run_server.py --port 9090 --backend faster_whisper --raw_pcm_input
+uv run run_server.py --port 9090 --backend faster_whisper --raw_pcm_input
 ```
 Audio is automatically normalized to float32 range [-1.0, 1.0]. Clients can also set `audio_format` in the initial websocket options to `float32` (default), `int16`, or `uint8`.
 
@@ -466,7 +463,7 @@ Refer to [`ios-client`](https://github.com/collabora/WhisperLive/tree/main/Audio
 On macOS, especially on Intel Macs, `faster_whisper`/`ctranslate2` can conflict with OpenMP runtimes loaded by other Python packages. If the server aborts with a duplicate OpenMP runtime error, run the server with `KMP_DUPLICATE_LIB_OK=TRUE`:
 
 ```bash
-KMP_DUPLICATE_LIB_OK=TRUE python3 run_server.py --port 9090 \
+KMP_DUPLICATE_LIB_OK=TRUE uv run run_server.py --port 9090 \
                       --backend faster_whisper \
                       --max_clients 4 \
                       --max_connection_time 600 \

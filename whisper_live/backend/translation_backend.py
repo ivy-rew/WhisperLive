@@ -6,13 +6,14 @@ import queue
 from typing import Dict, Any, Optional
 import torch
 import threading
-from transformers import M2M100ForConditionalGeneration
-from whisper_live.backend.tokenization_small100 import SMALL100Tokenizer
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 
 from whisper_live.backend.base import ServeClientBase
 
 
 class ServeClientTranslation(ServeClientBase):
+    PARTIAL_INTERVAL_S = 1.5
+
     """
     Handles translation of completed transcription segments in a separate thread.
     Reads from a queue populated by the transcription backend and sends translated
@@ -24,9 +25,9 @@ class ServeClientTranslation(ServeClientBase):
         client_uid,
         websocket,
         translation_queue,
-        target_language="fr", 
+        target_language="fr",
         send_last_n_segments=10,
-        model_name="alirezamsh/small100"
+        source_language=None,
     ):
         """
         Initialize the translation client.
@@ -37,13 +38,14 @@ class ServeClientTranslation(ServeClientBase):
             translation_queue (queue.Queue): Queue containing completed segments to translate
             target_language (str): Target language code (default: "fr" for French)
             send_last_n_segments (int): Number of recent translated segments to send
-            model_name (str): Translation model name to use
+            source_language (str): Language of the transcript, None for multilingual input
         """
         super().__init__(client_uid, websocket, send_last_n_segments)
         self.translation_queue = translation_queue
         self.target_language = target_language
-        self.model_name = model_name
+        self.model_name = f"Helsinki-NLP/opus-mt-{source_language or 'mul'}-{target_language}"
         self.translated_segments = []
+        self.partial_segment = None
         self.translation_model = None
         self.tokenizer = None
         self.device = None
@@ -56,21 +58,18 @@ class ServeClientTranslation(ServeClientBase):
             self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             logging.info(f"Loading translation model on device: {self.device}")
             
-            self.translation_model = M2M100ForConditionalGeneration.from_pretrained(
-                self.model_name
-            ).to(self.device)
-            self.tokenizer = SMALL100Tokenizer.from_pretrained(self.model_name)
-            self.tokenizer.tgt_lang = self.target_language
-            
+            self.translation_model = AutoModelForSeq2SeqLM.from_pretrained(self.model_name).to(self.device)
+            self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+
             self.model_loaded = True
-            logging.info(f"Translation model loaded successfully. Target language: {self.target_language}")
+            logging.info(f"Translation model {self.model_name} loaded successfully")
         except Exception as e:
             logging.error(f"Failed to load translation model: {e}")
             self.translation_model = None
             self.tokenizer = None
             self.model_loaded = False
     
-    def translate_text(self, text: str) -> str:
+    def translate_text(self, text: str, num_beams=None) -> str:
         """
         Translate a single text segment.
         
@@ -89,7 +88,7 @@ class ServeClientTranslation(ServeClientBase):
             
             # Generate translation
             with torch.no_grad():
-                generated_tokens = self.translation_model.generate(**encoded_input)
+                generated_tokens = self.translation_model.generate(**encoded_input, num_beams=num_beams)
             
             # Decode output
             output = self.tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
@@ -102,52 +101,55 @@ class ServeClientTranslation(ServeClientBase):
     def process_translation_queue(self):
         """
         Process segments from the translation queue.
-        Continuously reads from the queue until None is received (exit signal).
+        Completed segments are translated in order. The newest incomplete segment is
+        translated at most every PARTIAL_INTERVAL_S so the client sees a live preview.
         """
         logging.info(f"Starting translation processing for client {self.client_uid}")
-        
+        pending = None
+        last_partial_time = 0.0
+        last_partial_text = None
+
         while not self.exit:
             try:
-                # Get segment from queue with timeout
-                segment = self.translation_queue.get(timeout=1.0)
-                
-                # Check for exit signal
+                segment = self.translation_queue.get(timeout=0.2)
                 if segment is None:
                     logging.info(f"Received exit signal for translation client {self.client_uid}")
                     break
-                    
-                # Only translate completed segments
-                if not segment.get("completed", False):
-                    self.translation_queue.task_done()
-                    continue
-                    
-                # Translate the segment
-                original_text = segment.get("text", "")
-                translated_text = self.translate_text(original_text)
-                
-                # Create translated segment
-                translated_segment = {
-                    "start": segment["start"],
-                    "end": segment["end"],
-                    "text": translated_text,
-                    "completed": segment.get("completed", False),
-                    "target_language": self.target_language
-                }
-                
-                self.translated_segments.append(translated_segment)
-                segments_to_send = self.prepare_translated_segments()
-                self.send_translation_to_client(segments_to_send)
-                
                 self.translation_queue.task_done()
-                
+
+                if segment.get("completed", False):
+                    pending = None
+                    self.partial_segment = None
+                    self.translated_segments.append(self.translate_segment(segment))
+                    self.send_translation_to_client(self.prepare_translated_segments())
+                    continue
+                pending = segment
             except queue.Empty:
-                continue
+                pass
+
+            try:
+                if pending and pending["text"] == last_partial_text:
+                    pending = None
+                if pending and time.time() - last_partial_time >= self.PARTIAL_INTERVAL_S:
+                    self.partial_segment = self.translate_segment(pending, num_beams=1)
+                    last_partial_time = time.time()
+                    last_partial_text = pending["text"]
+                    pending = None
+                    self.send_translation_to_client(self.prepare_translated_segments())
             except Exception as e:
                 logging.error(f"Error processing translation queue: {e}")
-                continue
-        
+
         logging.info(f"Translation processing ended for client {self.client_uid}")
-    
+
+    def translate_segment(self, segment, num_beams=None):
+        return {
+            "start": segment["start"],
+            "end": segment["end"],
+            "text": self.translate_text(segment.get("text", ""), num_beams=num_beams),
+            "completed": segment.get("completed", False),
+            "target_language": self.target_language
+        }
+
     def prepare_translated_segments(self):
         """
         Prepare the last n translated segments to send to client.
@@ -155,9 +157,10 @@ class ServeClientTranslation(ServeClientBase):
         Returns:
             list: List of recent translated segments
         """
-        if len(self.translated_segments) >= self.send_last_n_segments:
-            return self.translated_segments[-self.send_last_n_segments:]
-        return self.translated_segments[:]
+        segments = self.translated_segments[-self.send_last_n_segments:]
+        if self.partial_segment:
+            segments.append(self.partial_segment)
+        return segments
     
     def send_translation_to_client(self, translated_segments):
         """
@@ -182,18 +185,6 @@ class ServeClientTranslation(ServeClientBase):
         This method will be called when the translation thread starts.
         """
         self.process_translation_queue()
-    
-    def set_target_language(self, language: str):
-        """
-        Change the target language for translation.
-        
-        Args:
-            language (str): New target language code
-        """
-        self.target_language = language
-        if self.tokenizer:
-            self.tokenizer.tgt_lang = language
-            logging.info(f"Target language changed to: {language}")
     
     def cleanup(self):
         """Clean up translation resources."""

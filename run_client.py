@@ -47,7 +47,7 @@ if __name__ == '__main__':
                           help='Save the output recording, only used for microphone input.')
     parser.add_argument('--enable_translation',
                           action='store_true',
-                          help='Enable any-to-any translation via M2M100 model (separate from Whisper --translate).')
+                          help='Enable translation via an OPUS-MT model (separate from Whisper --translate).')
     parser.add_argument('--target_language', '-tl',
                           type=str,
                           default='fr',
@@ -65,7 +65,7 @@ if __name__ == '__main__':
     if args.translate and args.enable_translation:
         print("[WARN]: Both --translate and --enable_translation are set. "
               "--translate uses Whisper's built-in to-English translation, "
-              "while --enable_translation uses M2M100 for any-to-any. "
+              "while --enable_translation uses OPUS-MT. "
               "Both will be active.")
 
     initial_prompt = None

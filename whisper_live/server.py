@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from starlette.responses import PlainTextResponse, StreamingResponse
 import uvicorn
 from faster_whisper import WhisperModel
-import torch
+import ctranslate2
 
 from enum import Enum
 
@@ -208,6 +208,7 @@ class BackendType(Enum):
     FASTER_WHISPER = "faster_whisper"
     TENSORRT = "tensorrt"
     OPENVINO = "openvino"
+    PARAKEET = "parakeet"
 
     @staticmethod
     def valid_types() -> List[str]:
@@ -225,6 +226,9 @@ class BackendType(Enum):
     
     def is_openvino(self) -> bool:
         return self == BackendType.OPENVINO
+
+    def is_parakeet(self) -> bool:
+        return self == BackendType.PARAKEET
 
 
 class AdmissionRateLimiter:
@@ -291,7 +295,8 @@ class TranscriptionServer:
                 websocket=websocket,
                 translation_queue=translation_queue,
                 target_language=target_language,
-                send_last_n_segments=options.get("send_last_n_segments", 10)
+                send_last_n_segments=options.get("send_last_n_segments", 10),
+                source_language=options.get("language"),
             )
             
             # Start translation thread
@@ -358,6 +363,19 @@ class TranscriptionServer:
                     "message": "OpenVINO not supported on Server yet. "
                                 "Reverting to available backend: 'faster_whisper'"
                 }))
+
+        if self.backend.is_parakeet():
+            from whisper_live.backend.parakeet_backend import ServeClientParakeet
+            client = ServeClientParakeet(
+                websocket,
+                language=options["language"],
+                client_uid=options["uid"],
+                send_last_n_segments=options.get("send_last_n_segments", 10),
+                clip_audio=options.get("clip_audio", False),
+                same_output_threshold=options.get("same_output_threshold", 10),
+                translation_queue=translation_queue,
+            )
+            logging.info("Running parakeet backend.")
 
         try:
             if self.backend.is_faster_whisper():
@@ -681,7 +699,7 @@ class TranscriptionServer:
         with self.rest_models_lock:
             transcriber = self.rest_models.get(model_name)
             if transcriber is None:
-                device = "cuda" if torch.cuda.is_available() else "cpu"
+                device = "cuda" if ctranslate2.get_cuda_device_count() > 0 else "cpu"
                 compute_type = "float16" if device == "cuda" else "int8"
                 logging.info(f"Loading REST model '{model_name}' on {device}")
                 transcriber = WhisperModel(model_name, device=device, compute_type=compute_type)
