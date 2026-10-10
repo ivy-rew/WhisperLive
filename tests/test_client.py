@@ -76,15 +76,24 @@ class TestTranscriptHighlight(unittest.TestCase):
 
     @patch("whisper_live.utils.shutil.get_terminal_size")
     @patch("sys.stdout", new_callable=StringIO)
-    def test_underlines_low_probability_words(self, mock_stdout, mock_terminal_size):
+    def test_underlines_words_by_probability_band(self, mock_stdout, mock_terminal_size):
         mock_terminal_size.return_value = os.terminal_size((80, 20))
 
         print_transcript(
-            ["An uncertain word"],
-            words_by_segment=[[{"word": "uncertain", "probability": 0.2}]],
+            ["high medium low boundary"],
+            words_by_segment=[[
+                {"word": "high", "probability": 0.9},
+                {"word": "medium", "probability": 0.5},
+                {"word": "low", "probability": 0.1},
+                {"word": "boundary", "probability": 0.6},
+            ]],
         )
 
-        self.assertIn("An \033[4;31muncertain\033[0m word", mock_stdout.getvalue())
+        output = mock_stdout.getvalue()
+        self.assertIn("\033[1;4;58;5;1mlow\033[0m", output)
+        self.assertIn("\033[4;58;5;9mmedium\033[0m", output)
+        self.assertNotIn("\033[4;58;5;9mhigh", output)
+        self.assertNotIn("\033[4;58;5;9mboundary", output)
 
     @patch("whisper_live.utils.shutil.get_terminal_size")
     @patch("sys.stdout", new_callable=StringIO)
@@ -97,7 +106,7 @@ class TestTranscriptHighlight(unittest.TestCase):
             words_by_segment=[[{"word": "uncertain", "probability": 0.2}]],
         )
 
-        self.assertIn("\033[4;31;43muncertain\033[0m", mock_stdout.getvalue())
+        self.assertIn("\033[1;4;58;5;1;30;43muncertain\033[0m", mock_stdout.getvalue())
 
 
 class TestLiveSegmentDisplay(BaseTestCase):
@@ -131,7 +140,7 @@ class TestLiveSegmentDisplay(BaseTestCase):
         output = mock_stdout.getvalue()
         self.assertIn("\033[30;42mrecent transcript onerecent transcript two\033[0m", output)
         self.assertNotIn("\033[30;42mold transcript\033[0m", output)
-        self.assertIn("\033[30;43mlive \033[0m\033[4;31;43mtranscript\033[0m", output)
+        self.assertIn("\033[30;43mlive \033[0m\033[1;4;58;5;1;30;43mtranscript\033[0m", output)
         self.assertIn("\033[30;42mtraduction recente un\033[0m", output)
         self.assertIn("\033[30;42mtraduction recente deux\033[0m", output)
         self.assertNotIn("\033[30;42mancienne traduction\033[0m", output)

@@ -6,8 +6,6 @@ import numpy as np
 import av
 from pathlib import Path
 
-LOW_CONFIDENCE_WORD_THRESHOLD = 0.5
-
 
 def clear_screen():
     """Clears the console screen and its scrollback buffer."""
@@ -39,7 +37,7 @@ def _wrap_with_highlights(text, wrapper, highlights):
     return wrapped_lines
 
 
-def _word_probability_highlights(text, words, offset=0, threshold=LOW_CONFIDENCE_WORD_THRESHOLD):
+def _word_probability_highlights(text, words, offset=0):
     highlights = []
     cursor = 0
     for word in words or []:
@@ -53,8 +51,14 @@ def _word_probability_highlights(text, words, offset=0, threshold=LOW_CONFIDENCE
             continue
         end = start + len(token)
         cursor = end
-        if word.get("probability", 1.0) < threshold:
-            highlights.append((offset + start, offset + end, "low_confidence"))
+        probability = word.get("probability")
+        if probability is None:
+            continue
+        probability = float(probability)
+        if probability < 0.3:
+            highlights.append((offset + start, offset + end, "confidence_low"))
+        elif probability < 0.6:
+            highlights.append((offset + start, offset + end, "confidence_medium"))
     return highlights
 
 
@@ -118,35 +122,40 @@ def print_transcript(
         position = 0
         while position < len(line):
             background = None
-            low_confidence = False
+            confidence = None
             for start, end, style in line_highlights:
                 if start <= position < end:
                     if style in ("ongoing", "completed"):
                         background = style
-                    elif style == "low_confidence":
-                        low_confidence = True
+                    elif style.startswith("confidence_"):
+                        confidence = style
 
             end = position + 1
             while end < len(line):
                 next_background = None
-                next_low_confidence = False
+                next_confidence = None
                 for start, stop, style in line_highlights:
                     if start <= end < stop:
                         if style in ("ongoing", "completed"):
                             next_background = style
-                        elif style == "low_confidence":
-                            next_low_confidence = True
-                if (next_background, next_low_confidence) != (background, low_confidence):
+                        elif style.startswith("confidence_"):
+                            next_confidence = style
+                if (next_background, next_confidence) != (background, confidence):
                     break
                 end += 1
 
             codes = []
-            if low_confidence:
-                codes.extend(("4", "31"))
-            if background == "ongoing":
-                codes.extend(("43",) if low_confidence else ("30", "43"))
+            if confidence == "confidence_low":
+                codes.extend(("1", "4", "58;5;1"))
+            elif confidence == "confidence_medium":
+                codes.extend(("4", "58;5;9"))
+            if background and confidence:
+                codes.append("30")
+                codes.append("43" if background == "ongoing" else "42")
+            elif background == "ongoing":
+                codes.extend(("30", "43"))
             elif background == "completed":
-                codes.extend(("42",) if low_confidence else ("30", "42"))
+                codes.extend(("30", "42"))
             content = line[position:end]
             if codes:
                 rendered.append(f'\033[{";".join(codes)}m{content}\033[0m')
