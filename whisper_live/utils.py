@@ -6,6 +6,8 @@ import numpy as np
 import av
 from pathlib import Path
 
+LOW_CONFIDENCE_WORD_THRESHOLD = 0.5
+
 
 def clear_screen():
     """Clears the console screen and its scrollback buffer."""
@@ -26,15 +28,34 @@ def _wrap_with_highlights(text, wrapper, highlights):
 
         source_end = source_start + len(content)
         line_highlights = []
-        for start, end, color in highlights:
+        for start, end, style in highlights:
             highlight_start = max(0, start - source_start)
             highlight_end = min(len(content), end - source_start)
             if highlight_start < highlight_end:
-                line_highlights.append((highlight_start, highlight_end, color))
+                line_highlights.append((highlight_start, highlight_end, style))
         wrapped_lines.append((indent + content, line_highlights))
         source_cursor = source_end
 
     return wrapped_lines
+
+
+def _word_probability_highlights(text, words, offset=0, threshold=LOW_CONFIDENCE_WORD_THRESHOLD):
+    highlights = []
+    cursor = 0
+    for word in words or []:
+        token = word.get("word", "").strip()
+        if not token:
+            continue
+        start = text.find(token, cursor)
+        if start < 0:
+            start = text.lower().find(token.lower(), cursor)
+        if start < 0:
+            continue
+        end = start + len(token)
+        cursor = end
+        if word.get("probability", 1.0) < threshold:
+            highlights.append((offset + start, offset + end, "low_confidence"))
+    return highlights
 
 
 def print_transcript(
@@ -44,6 +65,7 @@ def print_transcript(
     max_lines=3,
     ongoing_index=None,
     completed_indices=(),
+    words_by_segment=None,
 ):
     """Prints the last `max_lines` wrapped lines of transcript text in a subtitle-like block."""
     terminal_width = shutil.get_terminal_size((80, 20)).columns
@@ -60,11 +82,14 @@ def print_transcript(
             )
             segment_text = f'{prefix}{t["text"]}'
             if index == ongoing_index:
-                highlights = [(len(prefix), len(segment_text), "\033[30;43m")]
+                highlights = [(len(prefix), len(segment_text), "ongoing")]
             elif index in completed_indices:
-                highlights = [(len(prefix), len(segment_text), "\033[30;42m")]
+                highlights = [(len(prefix), len(segment_text), "completed")]
             else:
                 highlights = []
+            highlights.extend(_word_probability_highlights(
+                t["text"], t.get("words"), offset=len(prefix)
+            ))
             lines.extend(_wrap_with_highlights(segment_text, wrapper, highlights))
     else:
         wrapper = textwrap.TextWrapper(width=wrap_width)
@@ -74,25 +99,62 @@ def print_transcript(
         source_start = 0
         for index, part in enumerate(text):
             if index == ongoing_index:
-                color = "\033[30;43m"
+                style = "ongoing"
             elif index in completed_indices:
-                color = "\033[30;42m"
+                style = "completed"
             else:
-                color = None
-            if color and part:
-                highlights.append((source_start, source_start + len(part), color))
+                style = None
+            if style and part:
+                highlights.append((source_start, source_start + len(part), style))
+            segment_words = words_by_segment[index] if words_by_segment and index < len(words_by_segment) else None
+            highlights.extend(_word_probability_highlights(part, segment_words, offset=source_start))
             source_start += len(part) + (len(separator) if index < len(text) - 1 else 0)
         lines = _wrap_with_highlights(transcript, wrapper, highlights)
 
     for line, line_highlights in lines[-max_lines:]:
-        centered = line.center(terminal_width)
-        left_padding = (terminal_width - len(line)) // 2
-        for start, end, color in reversed(line_highlights):
-            start += left_padding
-            end += left_padding
-            centered = f'{centered[:end]}\033[0m{centered[end:]}'
-            centered = f'{centered[:start]}{color}{centered[start:]}'
-        print(centered)
+        left_padding = max(0, (terminal_width - len(line)) // 2)
+        right_padding = max(0, terminal_width - len(line) - left_padding)
+        rendered = []
+        position = 0
+        while position < len(line):
+            background = None
+            low_confidence = False
+            for start, end, style in line_highlights:
+                if start <= position < end:
+                    if style in ("ongoing", "completed"):
+                        background = style
+                    elif style == "low_confidence":
+                        low_confidence = True
+
+            end = position + 1
+            while end < len(line):
+                next_background = None
+                next_low_confidence = False
+                for start, stop, style in line_highlights:
+                    if start <= end < stop:
+                        if style in ("ongoing", "completed"):
+                            next_background = style
+                        elif style == "low_confidence":
+                            next_low_confidence = True
+                if (next_background, next_low_confidence) != (background, low_confidence):
+                    break
+                end += 1
+
+            codes = []
+            if low_confidence:
+                codes.extend(("4", "31"))
+            if background == "ongoing":
+                codes.extend(("43",) if low_confidence else ("30", "43"))
+            elif background == "completed":
+                codes.extend(("42",) if low_confidence else ("30", "42"))
+            content = line[position:end]
+            if codes:
+                rendered.append(f'\033[{";".join(codes)}m{content}\033[0m')
+            else:
+                rendered.append(content)
+            position = end
+
+        print(f'{" " * left_padding}{"".join(rendered)}{" " * right_padding}')
 
 
 def format_time(s):

@@ -232,13 +232,19 @@ class Client:
         if self.log_transcription:
             if self.enable_timestamps:
                 original_text_with_timestamps = [
-                    {"start": seg["start"], "end": seg["end"], "text": seg["text"]}
+                    {
+                        "start": seg["start"],
+                        "end": seg["end"],
+                        "text": seg["text"],
+                        "words": seg.get("words"),
+                    }
                     for seg in self.transcript[-self.display_segments:]]
                 if self.last_segment is not None:
                     original_text_with_timestamps.append({
                         "start": self.last_segment["start"],
                         "end": self.last_segment["end"],
-                        "text": self.last_segment["text"]
+                        "text": self.last_segment["text"],
+                        "words": self.last_segment.get("words"),
                     })
                 transcript_ongoing_index = len(original_text_with_timestamps) - 1 if self.last_segment is not None else None
                 transcript_completed_count = len(original_text_with_timestamps) - int(transcript_ongoing_index is not None)
@@ -264,9 +270,12 @@ class Client:
                         completed_indices=range(max(0, translation_completed_count - 2), translation_completed_count))
 
             else:
-                original_text = [seg["text"] for seg in self.transcript[-self.display_segments:]]
+                original_segments = self.transcript[-self.display_segments:]
+                original_text = [seg["text"] for seg in original_segments]
+                words_by_segment = [seg.get("words") for seg in original_segments]
                 if self.last_segment is not None:
                     original_text.append(self.last_segment["text"])
+                    words_by_segment.append(self.last_segment.get("words"))
                 transcript_ongoing_index = len(original_text) - 1 if self.last_segment is not None else None
                 transcript_completed_count = len(original_text) - int(transcript_ongoing_index is not None)
                 utils.clear_screen()
@@ -275,6 +284,7 @@ class Client:
                     max_lines=self.display_segments,
                     ongoing_index=transcript_ongoing_index,
                     completed_indices=range(max(0, transcript_completed_count - 2), transcript_completed_count),
+                    words_by_segment=words_by_segment if self.word_timestamps else None,
                 )
 
                 if self.enable_translation:

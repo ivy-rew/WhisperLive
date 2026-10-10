@@ -74,6 +74,31 @@ class TestTranscriptHighlight(unittest.TestCase):
         self.assertIn("[2.000 -> 3.000] \033[30;42mjust completed\033[0m", output)
         self.assertIn("[3.000 -> 4.000] \033[30;43mstill changing\033[0m", output)
 
+    @patch("whisper_live.utils.shutil.get_terminal_size")
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_underlines_low_probability_words(self, mock_stdout, mock_terminal_size):
+        mock_terminal_size.return_value = os.terminal_size((80, 20))
+
+        print_transcript(
+            ["An uncertain word"],
+            words_by_segment=[[{"word": "uncertain", "probability": 0.2}]],
+        )
+
+        self.assertIn("An \033[4;31muncertain\033[0m word", mock_stdout.getvalue())
+
+    @patch("whisper_live.utils.shutil.get_terminal_size")
+    @patch("sys.stdout", new_callable=StringIO)
+    def test_low_probability_underline_preserves_ongoing_background(self, mock_stdout, mock_terminal_size):
+        mock_terminal_size.return_value = os.terminal_size((80, 20))
+
+        print_transcript(
+            ["uncertain"],
+            ongoing_index=0,
+            words_by_segment=[[{"word": "uncertain", "probability": 0.2}]],
+        )
+
+        self.assertIn("\033[4;31;43muncertain\033[0m", mock_stdout.getvalue())
+
 
 class TestLiveSegmentDisplay(BaseTestCase):
     @patch("whisper_live.utils.shutil.get_terminal_size")
@@ -82,12 +107,19 @@ class TestLiveSegmentDisplay(BaseTestCase):
         mock_terminal_size.return_value = os.terminal_size((80, 20))
         self.client.server_backend = "faster_whisper"
         self.client.enable_translation = True
+        self.client.word_timestamps = True
 
         self.client.process_segments([
             {"start": "0.000", "end": "1.000", "text": "old transcript", "completed": True},
             {"start": "1.000", "end": "2.000", "text": "recent transcript one", "completed": True},
             {"start": "2.000", "end": "3.000", "text": "recent transcript two", "completed": True},
-            {"start": "3.000", "end": "4.000", "text": "live transcript", "completed": False},
+            {
+                "start": "3.000",
+                "end": "4.000",
+                "text": "live transcript",
+                "completed": False,
+                "words": [{"word": "transcript", "probability": 0.2}],
+            },
         ])
         self.client.process_segments([
             {"start": "0.000", "end": "1.000", "text": "ancienne traduction", "completed": True},
@@ -97,10 +129,9 @@ class TestLiveSegmentDisplay(BaseTestCase):
         ], translated=True)
 
         output = mock_stdout.getvalue()
-        self.assertIn("\033[30;42mrecent transcript one\033[0m", output)
-        self.assertIn("\033[30;42mrecent transcript two\033[0m", output)
+        self.assertIn("\033[30;42mrecent transcript onerecent transcript two\033[0m", output)
         self.assertNotIn("\033[30;42mold transcript\033[0m", output)
-        self.assertIn("\033[30;43mlive transcript\033[0m", output)
+        self.assertIn("\033[30;43mlive \033[0m\033[4;31;43mtranscript\033[0m", output)
         self.assertIn("\033[30;42mtraduction recente un\033[0m", output)
         self.assertIn("\033[30;42mtraduction recente deux\033[0m", output)
         self.assertNotIn("\033[30;42mancienne traduction\033[0m", output)
